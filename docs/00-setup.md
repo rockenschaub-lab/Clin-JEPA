@@ -24,11 +24,13 @@ pip install -e ".[dev]" && pytest                    # tests, a few seconds on C
 
 ## Paths
 
-Four environment variables set the paths; `.env.example` lists them with the two CLMBR-T-base paths of stage 08:
+Environment variables set the paths; `.env.example` lists them with the two CLMBR-T-base paths of stage 08:
 
 | variable | content |
 |---|---|
-| `MIMIC_RAW` | MIMIC-IV v3.1 (`hosp/`, `icu/`) and the mimic-code concept tables (`concepts/`) |
+| `MIMIC_RAW` | Native MIMIC-IV v3.1 (`hosp/`, `icu/`) |
+| `WEAVEHR_PROJECT` | WeavEHR project, separate for each dataset |
+| `AMSTERDAM_OMOP` | AMSTEL OMOP 5.4 Parquet export of AmsterdamUMCdb 1.5.0 |
 | `CLIN_JEPA_DATA` | pipeline outputs: about 25 GB for stage 01, about 96 GB per embedding cache |
 | `CLIN_JEPA_OUTPUT` | checkpoints, rollouts, evaluation results, figures and tables |
 | `HF_HOME` | Hugging Face cache holding `Qwen/Qwen3-8B` (16 GB) |
@@ -40,8 +42,8 @@ set -a; source .env; set +a
 
 ## Data access
 
-1. Obtain credentialed access to [MIMIC-IV](https://physionet.org/content/mimiciv/3.1/) on PhysioNet and download v3.1 into `$MIMIC_RAW` (`hosp/` and `icu/`).
-2. Build the derived concept tables with [mimic-code](https://github.com/MIT-LCP/mimic-code/tree/main/mimic-iv/concepts) and export each one as `$MIMIC_RAW/concepts/<group>/<table>.csv`. The tables that are read are listed under `concepts:` in `configs/data/paths.yaml`.
+1. Obtain credentialed access to [MIMIC-IV](https://physionet.org/content/mimic-iv/3.1/) on PhysioNet and download v3.1 into `$MIMIC_RAW` (`hosp/` and `icu/`).
+2. Run the [shared WeavEHR preparation pipeline](data-preparation.md). WeavEHR builds its project in a separate Python 3.13 environment; no mimic-code SQL exports are needed. The same guide covers AmsterdamUMCdb.
 3. Download the base model once: `huggingface-cli download Qwen/Qwen3-8B`. The trainers then load it offline (`hf.offline` in the configs).
 
 ## SLURM

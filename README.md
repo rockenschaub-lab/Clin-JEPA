@@ -29,17 +29,32 @@ Instead of freezing the encoder before the predictor is trained, Clin-JEPA train
 
 ## What is here
 
-The code that takes MIMIC-IV v3.1 to every figure and table of the paper's experiments:
+The upstream model and evaluation code, with the data preparation replaced as described below:
 
 - the data pipeline: cohort, hourly observations and interventions, patient-level split, text trajectories;
 - training of the six models the paper compares: Clin-JEPA, the V-JEPA 2-AC style and SFT baselines, the two curriculum ablations, and the variant with a predictor trained separately on the frozen Clin-JEPA encoder;
 - one latent rollout per model, shared by all evaluations;
 - the three evaluations: stability of the co-trained encoder and predictor, latent geometry, and 34 downstream tasks on three benchmarks against Ridge, LightGBM, LSTM, TCN and CLMBR-T-base.
 
+## Shared WeavEHR pipeline
+
+This fork replaces the mimic-code data preparation with **one WeavEHR-based
+pipeline for MIMIC-IV and AmsterdamUMCdb 1.5.0 (AMSTEL OMOP 5.4)**. It uses a
+shared concept profile, preserves native stay identity, reconstructs documented
+infusion intervals and feeds the current upstream trajectory/training schema.
+
+Start with [data preparation](docs/data-preparation.md). WeavEHR runs in a
+separate Python 3.13 environment. Every run reports concept coverage and retains
+source provenance; missing outcomes remain unknown. The resulting clinical
+features and cohort differ from the paper's mimic-code pipeline, and several of
+the original 34 downstream endpoints remain masked pending validation. The
+optional CLMBR baseline retains its separate upstream MIMIC input requirements.
+
 ## Getting started
 
 ```bash
-git clone https://github.com/Kamaleswaran-Lab/Clin-JEPA.git && cd Clin-JEPA
+git clone --branch feat/weavehr-minimal https://github.com/rockenschaub-lab/Clin-JEPA.git
+cd Clin-JEPA
 pip install -r requirements.txt && pip install -e .
 pip install flash-attn==2.8.3 --no-build-isolation   # on a GPU node with the CUDA toolkit
 cp .env.example .env                                 # paths to MIMIC-IV, the outputs and the Hugging Face cache
@@ -69,7 +84,7 @@ Each stage has a guide in [`docs/`](docs) with its inputs, commands, outputs and
 
 ```
 clin_jepa/
-  data/          MIMIC-IV to text trajectories
+  data/          WeavEHR project to text trajectories
   model/         action-conditioned predictor, masked-prediction head
   training/      encoder SFT, curriculum, V-JEPA 2-AC style refinement, predictors on frozen encoders
   encode.py      embedding caches

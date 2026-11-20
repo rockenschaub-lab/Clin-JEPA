@@ -1,9 +1,16 @@
 # 08 · Downstream tasks (§5.4)
 
-Input: hourly bins, cohort and trajectory shards (01), the embedding caches of `clin_jepa`, `vjepa2ac` and `sft_baseline` (03), their rollouts on all three splits (05), and from `$MIMIC_RAW` the `admissions`, `patients`, `icustays` and `ventilation` tables. Output: `$CLIN_JEPA_OUTPUT/downstream/`. Tasks, read-out settings, baseline grids and the bootstrap are in `clin_jepa/downstream/tasks.py` and `configs/downstream.yaml`; CLMBR-T-base is configured in `configs/clmbr.yaml`.
+> This fork now reads canonical WeavEHR cohorts/events for label generation.
+> See [preparation and endpoint coverage](data-preparation.md): only supported
+> endpoints are observed, and `labels/coverage.json` reports counts. The original
+> 34-task benchmark below is not a claim of validated endpoint parity for the
+> new pipeline. The optional CLMBR subsection remains MIMIC-specific.
+
+
+Input: hourly bins, cohort and trajectory shards (01), the embedding caches of `clin_jepa`, `vjepa2ac` and `sft_baseline` (03), their rollouts on all three splits (05). Label generation reads canonical WeavEHR cohort and event outputs. Output: `$CLIN_JEPA_OUTPUT/downstream/`. Tasks, read-out settings, baseline grids and the bootstrap are in `clin_jepa/downstream/tasks.py` and `configs/downstream.yaml`; CLMBR-T-base is configured in `configs/clmbr.yaml`.
 
 ```bash
-python -m clin_jepa.downstream.labels
+python -m clin_jepa.downstream.labels --weavehr_project /path/to/weavehr-project --dataset mimic-iv
 
 python -m clin_jepa.downstream.history --encoder clin_jepa --split train        # every encoder and split
 python -m clin_jepa.downstream.readout --benchmark E1 --encoder clin_jepa --variant full   # E1 E2 E3 x encoder x hist|full
@@ -25,7 +32,7 @@ python -m clin_jepa.downstream.report
 | `labels` | the task labels per stay-hour or per stay, NaN where a task is undefined | `labels/hourly.parquet`, `labels/stay.parquet` |
 | `history` | per window: mean, standard deviation and last of the 24 context state and action embeddings, and the demographics embedding | `features/<encoder>/<split>/` |
 | `readout` | one MLP per task on the context block (`hist`) or on the context block and the pooled rollout at the task's horizon (`full`) | `predictions/<task>/<encoder>_<variant>.parquet` |
-| `tabular` | the record the encoders read as 400 hourly columns and 7 static columns; `census` fixes the item and ventilator-mode columns from the training split | `tabular/` |
+| `tabular` | the record the encoders read as hourly columns (WeavEHR concepts by name, medication classes and items) and 7 static columns; `census` fixes the item columns from the training split | `tabular/` |
 | `baselines` | Ridge and LightGBM on 24-hour summary statistics, LSTM and TCN on the 24-hour sequence | `predictions/<task>/<model>.parquet` |
 | `clmbr.timelines` | per subject, the laboratory, charted, input, output and procedure events that map into the model's vocabulary, up to the cutoff (24 h into the first stay, or the end of the subject's last hourly row), as MEDS patients; events read, mapped and in vocabulary per table | `clmbr/timelines/<rows>/<split>/` |
 | `clmbr.extract` | the 768-d representation of the last token at or before each row's cutoff, from the last 496 tokens of the timeline | `clmbr/features/<rows>/<split>/` |

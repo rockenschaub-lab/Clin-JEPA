@@ -56,3 +56,15 @@ trajectory shards (01)
   -> rollout (05) -> stability (06), downstream (08)
      embedding caches (03) -> geometry (07)
 ```
+
+## Data source
+
+Steps 01–03 read a WeavEHR project and keep upstream's code: Step 01 selects the cohort, Steps 02 and 03
+write upstream's event tables. What exists only because of how WeavEHR delivers
+data (rebuilding ICU stays, reading a concept as a column of a concept table, pairing
+rate updates and ventilation markers into intervals) is in
+`data/helpers/weavehr.py`, each part tied to an item WeavEHR could fix. Its readers return tables shaped
+like the mimic-code tables upstream reads, so a step only swaps the loader.
+`data/helpers/source.py` looks up the dataset's definition by its WeavEHR name.
+Steps 04–06, the trajectory shards and the training loader are upstream's. The unit and text helpers take the
+units, names and order of the WeavEHR concepts from `configs/data/features.yaml`.
