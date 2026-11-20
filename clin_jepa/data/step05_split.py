@@ -30,10 +30,15 @@ def main() -> None:
         .reset_index()
     )
     subjects["strat_label"] = (
-        subjects["mortality"].astype(int).astype(str)
+        subjects["mortality"].fillna(-1).astype(int).astype(str)
         + "_"
-        + subjects["sepsis3"].astype(int).astype(str)
+        + subjects["sepsis3"].fillna(-1).astype(int).astype(str)
     )
+    # Strata too small to split (a small or partial cohort) fall back to one stratum.
+    counts = subjects["strat_label"].map(subjects["strat_label"].value_counts())
+    if (counts < 10).any():
+        logger.warning("Strata with fewer than 10 patients; splitting without stratification")
+        subjects["strat_label"] = "all"
 
     train_subj, temp_subj, _, temp_strat = train_test_split(
         subjects["subject_id"].values, subjects["strat_label"].values,
