@@ -5,7 +5,9 @@ import logging
 
 import pandas as pd
 
-from clin_jepa.data.helpers.io_utils import load_concepts_table, resolve_table_path
+from clin_jepa.data.helpers.io_utils import resolve_table_path
+from clin_jepa.data.helpers.source import add_data_arguments, data_paths, load_data_config
+from clin_jepa.data.helpers.weavehr import Project, icustay_detail, sepsis3, stays_with_values
 from clin_jepa.utils import ensure_dir, load_config, setup_logging
 
 logger = logging.getLogger(__name__)
@@ -31,26 +33,17 @@ def _log_filter(name: str, before: int, after: int) -> None:
     logger.info("filter [%s]: %d -> %d", name, before, after)
 
 
-def _flag(column: pd.Series) -> pd.Series:
-    """Boolean column of a concept table, exported as ``t`` / ``f`` or as ``true`` / ``false``."""
-    return column.astype(str).str.lower().isin(["t", "true"])
-
-
-def _stays_with_vitals(paths_config: dict) -> set:
-    filepath = resolve_table_path(paths_config, "concepts.measurement.vitalsign")
-    stay_ids: set = set()
-    for chunk in pd.read_csv(filepath, usecols=["stay_id"], chunksize=1_000_000):
-        stay_ids.update(chunk["stay_id"].dropna().astype(int).unique())
-    return stay_ids
+def _stays_with_vitals(project: Project, stays: pd.DataFrame) -> set:
+    features = load_data_config(project.paths, "features")
+    vitals = [rule for rule in features["observations"] if rule["category"] == "vital"]
+    return stays_with_values(project, stays, vitals)
 
 
 def build_cohort(paths_config: dict, cohort_config: dict) -> pd.DataFrame:
-    """Apply the inclusion criteria to ``icustay_detail`` and join the Sepsis-3 flag."""
-    df = load_concepts_table(paths_config, "concepts.demographics.icustay_detail")
+    """Apply the inclusion criteria to the ICU stays of the WeavEHR project and join the Sepsis-3 flag."""
+    project = Project(paths_config)
+    df = icustay_detail(project)
     n_initial = len(df)
-
-    df = df.dropna(subset=["stay_id", "subject_id", "hadm_id"])
-    df = df.drop_duplicates(subset=["stay_id"], keep="first")
 
     n = len(df)
     inclusion = cohort_config["inclusion"]
@@ -63,7 +56,7 @@ def build_cohort(paths_config: dict, cohort_config: dict) -> pd.DataFrame:
     _log_filter("valid ICU times", n, len(df))
 
     n = len(df)
-    df = df[_flag(df["first_icu_stay"])]
+    df = df[df["first_icu_stay"]]
     _log_filter("first ICU stay of the admission", n, len(df))
 
     n = len(df)
@@ -72,19 +65,13 @@ def build_cohort(paths_config: dict, cohort_config: dict) -> pd.DataFrame:
     _log_filter(f"ICU LOS >= {min_los_hours} h", n, len(df))
 
     n = len(df)
-    df = df[df["stay_id"].isin(_stays_with_vitals(paths_config))]
+    df = df[df["stay_id"].isin(_stays_with_vitals(project, df))]
     _log_filter("at least one vital sign", n, len(df))
 
     df["icu_los_hours"] = (df["los_icu"] * 24).clip(upper=cohort_config["max_icu_los_hours"])
 
-    sepsis = load_concepts_table(
-        paths_config, "concepts.sepsis.sepsis3",
-        usecols=["stay_id", "sepsis3", "sofa_time"],
-    )
-    sepsis["sepsis3"] = _flag(sepsis["sepsis3"])
-    sepsis = sepsis.rename(columns={"sofa_time": "sepsis_sofa_time"})
+    sepsis = sepsis3(project, df, cohort_config["sepsis"]["prevalent_lookback_hours"])
     df = df.merge(sepsis, on="stay_id", how="left")
-    df["sepsis3"] = df["sepsis3"].fillna(False).astype(bool)
 
     df = df[OUTPUT_COLUMNS].sort_values("stay_id").reset_index(drop=True)
     logger.info("cohort: %d of %d ICU stays", len(df), n_initial)
@@ -93,12 +80,12 @@ def build_cohort(paths_config: dict, cohort_config: dict) -> pd.DataFrame:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--paths_config", default="configs/data/paths.yaml")
+    add_data_arguments(parser)
     parser.add_argument("--cohort_config", default="configs/data/cohort.yaml")
     args = parser.parse_args()
 
     setup_logging()
-    paths_config = load_config(args.paths_config)
+    paths_config = data_paths(args)
     cohort = build_cohort(paths_config, load_config(args.cohort_config))
 
     output_dir = ensure_dir(resolve_table_path(paths_config, "output.cohort"))

@@ -5,3 +5,7 @@ inclusion:
   min_icu_los_hours: 6
 
 max_icu_los_hours: 336
+# Sepsis that began up to this long before ICU admission counts as present on
+# admission (48 h is the lead of the Sepsis-3 SOFA window).
+sepsis:
+  prevalent_lookback_hours: 48
