@@ -1,4 +1,4 @@
-"""Step 03: extract intervention events from concept tables and raw MIMIC-IV tables, one parquet per stay."""
+"""Step 03: extract intervention events from the WeavEHR concepts and source records, one parquet per stay."""
 
 import gc
 import logging
@@ -9,32 +9,23 @@ import pandas as pd
 from clin_jepa.data.helpers.io_utils import (
     add_events,
     extraction_args,
-    load_and_filter_concepts_table,
-    load_and_filter_raw_table,
     load_chunk_cohort,
     resolve_table_path,
-    resolve_value_columns,
     write_stay_events,
 )
-from clin_jepa.data.helpers.schema import OUTPUT_COLUMNS, empty_events_df
+from clin_jepa.data.helpers.schema import CONCEPT_SOURCE, OUTPUT_COLUMNS, OUTPUT_DTYPES, empty_events_df
+from clin_jepa.data.helpers.source import data_paths
 from clin_jepa.data.helpers.temporal_utils import (
-    assign_stay_ids_from_hadm,
-    build_hadm_windows,
     build_icu_windows,
     build_intime_map,
     build_outtime_map,
-    clip_to_icu_window,
     compute_hours_since_admission,
 )
 from clin_jepa.data.helpers.units import get_unit
+from clin_jepa.data.helpers.weavehr import Project, action_table, assign_stay_ids, optional_column
 from clin_jepa.utils import ensure_dir, load_config, setup_logging
 
 logger = logging.getLogger(__name__)
-
-
-VALID_EVENT_STATUS = {"FinishedRunning", "Paused", "Stopped"}
-
-VALID_EMAR_EVENTS = {"Administered", "Applied"}
 
 
 def melt_to_long_action(
@@ -125,54 +116,38 @@ def melt_to_long_action(
     return result[OUTPUT_COLUMNS]
 
 
-def process_concepts_action_source(
-    source_name: str,
-    source_config: dict,
-    paths_config: dict,
-    chunk_stay_ids_set: set,
+def process_action_concept(
+    rule: dict,
+    project: Project,
+    chunk_subject_ids_set: set,
     windows_df: pd.DataFrame,
     intime_map: dict,
     outtime_map: dict,
 ) -> pd.DataFrame:
-    """Process a single concepts-table action source."""
-    join_col = source_config["join_col"]
-    timestamp_col = source_config["timestamp_col"]
-    category = source_config["category"]
-    source_dotpath = source_config["source"]
-    end_col = source_config.get("end_col")
-    is_continuous = source_config.get("is_continuous", False)
+    """Process a single WeavEHR action concept."""
+    concept = rule["concept"]
+    is_continuous = rule.get("mode", "point") != "point"
+    end_col = "end_time" if is_continuous else None
 
-    logger.info(
-        "Processing %s (join=%s, category=%s, end_col=%s, continuous=%s)",
-        source_name, join_col, category, end_col, is_continuous,
-    )
+    logger.info("Processing %s (category=%s, continuous=%s)", concept, rule["category"], is_continuous)
 
-    df = load_and_filter_concepts_table(
-        paths_config, source_dotpath, join_col, chunk_stay_ids_set,
-    )
+    df = action_table(project, rule, chunk_subject_ids_set)
 
     if len(df) == 0:
-        logger.warning("  No data found for %s", source_name)
+        logger.warning("  No data found for %s", concept)
         return empty_events_df()
 
-    df[timestamp_col] = pd.to_datetime(df[timestamp_col])
-    if end_col and end_col in df.columns:
-        df[end_col] = pd.to_datetime(df[end_col])
-    df = clip_to_icu_window(df, windows_df, timestamp_col)
+    df = assign_stay_ids(df, windows_df, "time")
     if len(df) == 0:
-        logger.warning("  No rows within ICU window for %s", source_name)
+        logger.warning("  No rows within ICU window for %s", concept)
         return empty_events_df()
 
-    config_value_cols = source_config.get("value_cols", "all")
-    numeric_cols, categorical_cols = resolve_value_columns(df, config_value_cols)
-    logger.info(
-        "  Value columns: %d numeric, %d categorical",
-        len(numeric_cols), len(categorical_cols),
-    )
+    name = rule.get("name", concept)
+    numeric_cols, categorical_cols = ([], [name]) if rule.get("levels") else ([name], [])
 
     events = melt_to_long_action(
-        df, source_name, category, numeric_cols, categorical_cols,
-        timestamp_col, intime_map, outtime_map, end_col, is_continuous,
+        df, CONCEPT_SOURCE, rule["category"], numeric_cols, categorical_cols,
+        "time", intime_map, outtime_map, end_col, is_continuous,
     )
 
     logger.info("  Produced %d event rows", len(events))
@@ -183,376 +158,189 @@ def process_concepts_action_source(
     return events
 
 
-def load_d_items(paths_config: dict) -> dict[int, str]:
-    """Load d_items.csv.gz and return itemid -> label mapping."""
-    df = pd.read_csv(resolve_table_path(paths_config, "icu.d_items"), usecols=["itemid", "label"])
-    mapping = dict(zip(df["itemid"].astype(int), df["label"]))
-    logger.info("Loaded d_items: %d item mappings", len(mapping))
-    return mapping
+def _item_names(codes: pd.Series) -> pd.Series:
+    """Item of an extracted event code: ``INFUSION_END//221906//Norepinephrine`` is ``Norepinephrine``."""
+
+    def name(code) -> str:
+        parts = str(code).split("//") if pd.notna(code) else []
+        label = parts[-1] if len(parts) > 1 else ""
+        # The name is kept exactly as the source wrote it, including any spaces.
+        if label.strip() and label != "None":
+            return label
+        return "unknown_item" + (f"_{parts[-2]}" if len(parts) > 2 else "")
+
+    return codes.map(name)
 
 
-def process_inputevents(
-    paths_config: dict,
-    chunk_stay_ids_set: set,
-    d_items_map: dict[int, str],
+def _rate_text(rows: pd.DataFrame, text: dict) -> pd.Series:
+    """``<rate> <unit>`` of the records that have a rate, otherwise an empty string."""
+    if "rate" not in text:
+        return pd.Series("", index=rows.index, dtype=object)
+    rate = pd.to_numeric(rows[text["rate"]], errors="coerce").astype("float32").astype(str).replace("nan", "")
+    if "rate_unit" not in text:
+        return rate.astype(object)
+    # A source may fill its rate column for records that have none, such as a
+    # bolus; only a rate with a unit is one.
+    unit = rows[text["rate_unit"]].astype("string").fillna("").astype(object)
+    return (rate + " " + unit).where((rate != "") & (unit != ""), "").astype(object)
+
+
+def _packed_text(rows: pd.DataFrame, text: dict) -> pd.Series:
+    """Details of a source record in the packed form the text templates read.
+
+    ``rate:<rate> <unit> | <detail>`` for an infusion, ``route:<route> |
+    <detail>`` for an order, otherwise the detail alone.
+    """
+
+    def column(key: str) -> pd.Series:
+        if key not in text:
+            return pd.Series("", index=rows.index)
+        return rows[text[key]].astype("string").fillna("").astype(object)
+
+    detail = column("detail")
+    if "rate" in text:
+        rate = _rate_text(rows, text)
+        packed = np.where(rate != "", "rate:" + rate + " | " + detail, detail)
+    elif "route" in text:
+        route = column("route")
+        packed = np.where(route != "", "route:" + route + " | " + detail, detail)
+    else:
+        packed = detail.to_numpy()
+    return pd.Series(packed, index=rows.index, dtype=object).str.strip(" |")
+
+
+def source_records(
+    project: Project,
+    name: str,
+    spec: dict,
+    chunk_subject_ids_set: set,
     windows_df: pd.DataFrame,
     intime_map: dict,
     outtime_map: dict,
 ) -> pd.DataFrame:
-    """Process inputevents (IV fluids, medications, blood products)."""
-    logger.info("Processing inputevents (raw, stay_id, continuous)")
+    """Unharmonised records of one extraction table as canonical action events.
 
-    usecols = [
-        "stay_id", "starttime", "endtime", "itemid",
-        "amount", "amountuom", "rate", "rateuom",
-        "ordercategorydescription", "statusdescription",
-    ]
+    ``spec`` is the table's entry under ``raw_actions`` in the dataset profile.
+    It names the extracted event with one row per source record and the
+    columns to read. Item names and values are the source's own. A record
+    belongs to the ICU stay in which it starts.
 
-    df = load_and_filter_raw_table(
-        paths_config, "icu.inputevents", "stay_id",
-        chunk_stay_ids_set, usecols=usecols,
-    )
+    ``start`` names a second event of the same record that carries its start
+    time. What that start event says (such as the rate that was set) is stated
+    for as long as the record runs. The value of the end event (such as the
+    amount that was delivered) is only known afterwards: it is a separate
+    event at the later of the end and its recorded availability, so that no
+    hour reads a value from its own future. A record with nothing to state
+    from its start is that later event alone.
 
-    if len(df) == 0:
-        logger.warning("  No inputevents data found")
+    WeavEHR extracts every table whose raw file it finds; a table it did not extract gives no events.
+    """
+    if name == CONCEPT_SOURCE:
+        raise ValueError(f"{CONCEPT_SOURCE!r} is reserved for harmonised concepts")
+    text_columns = spec.get("text", {})
+    if "start" in spec and any(not str(column).startswith("start.") for column in text_columns.values()):
+        raise ValueError(f"raw_actions.{name}: the text of a record with a start event may only read start.<column>")
+    rows = project.event(spec["table"], spec["event"], chunk_subject_ids_set)
+    start = project.event(spec["table"], spec["start"]["event"], chunk_subject_ids_set) if "start" in spec else None
+    if rows is None or ("start" in spec and start is None):
+        logger.info("%s: not extracted by WeavEHR", name)
         return empty_events_df()
-
-    n_before = len(df)
-    df = df[df["statusdescription"].isin(VALID_EVENT_STATUS)].reset_index(drop=True)
-    logger.info(
-        "  Status filter: %d -> %d rows (dropped %d)",
-        n_before, len(df), n_before - len(df),
-    )
-
-    if len(df) == 0:
+    if rows.empty or (start is not None and start.empty):
         return empty_events_df()
-
-    df["starttime"] = pd.to_datetime(df["starttime"])
-    df["endtime"] = pd.to_datetime(df["endtime"])
-    df = clip_to_icu_window(df, windows_df, "starttime")
-
-    if len(df) == 0:
+    rows["_end"] = pd.NaT
+    if start is not None:
+        # Both events of a record carry its item and the listed record IDs.
+        keys = ["subject_id", "_item", *spec["start"]["ids"]]
+        for frame in (rows, start):
+            frame["_item"] = frame.code.astype("string").str.split("//", n=1).str[1]
+            frame.sort_values("time", kind="stable", inplace=True)
+            frame["_n"] = frame.groupby(keys, dropna=False).cumcount()
+        start = start.rename(columns=lambda c: c if c in {*keys, "_n"} else f"start.{c}")
+        paired = rows.merge(start, on=[*keys, "_n"], how="inner")
+        if len(rows) > len(paired):
+            logger.warning("%s: %d records without a start event are left out", name, len(rows) - len(paired))
+        rows = paired.assign(_end=paired.time, time=paired["start.time"])
+    elif "time" in spec:
+        rows["time"] = pd.to_datetime(rows[spec["time"]])
+        if "end_time" in spec:
+            rows["_end"] = pd.to_datetime(rows[spec["end_time"]])
+    for column, values in spec.get("keep", {}).items():
+        rows = rows[rows[column].isin(values)]
+    # A record whose documented end precedes its start has no usable interval.
+    rows = rows[rows.time.notna() & ~(rows._end < rows.time)]
+    rows = assign_stay_ids(rows, windows_df, "time")
+    if rows.empty:
         return empty_events_df()
+    numeric = pd.to_numeric(rows[spec["numeric_value"]], errors="coerce") if "numeric_value" in spec else np.nan
+    unit = rows[spec["unit"]].astype("string").fillna("").astype(object) if "unit" in spec else ""
+    text = _packed_text(rows, text_columns)
+    outtime = rows["stay_id"].map(outtime_map)
+    end = pd.concat([rows._end, outtime], axis=1).min(axis=1).where(rows._end.notna())
 
-    df["variable_name"] = df["itemid"].map(d_items_map)
-    unmapped = df["variable_name"].isna()
-    if unmapped.any():
-        logger.warning("  %d rows with unmapped itemid", unmapped.sum())
-        df.loc[unmapped, "variable_name"] = (
-            "unknown_item_" + df.loc[unmapped, "itemid"].astype(str)
-        )
+    def events(keep, time, end, numeric, text, unit) -> pd.DataFrame:
+        def hours(moment) -> pd.Series:
+            return compute_hours_since_admission(pd.to_datetime(moment), rows["stay_id"], intime_map)
 
-    df["timestamp"] = df["starttime"]
-    df["timestamp_hours"] = compute_hours_since_admission(
-        df["timestamp"], df["stay_id"], intime_map,
-    )
+        end = pd.Series(end, index=rows.index, dtype="datetime64[ns]")
+        interval = end.notna() & (end > time)
+        frame = pd.DataFrame({
+            "stay_id": rows.stay_id,
+            "timestamp": time,
+            "timestamp_hours": hours(time),
+            "domain": "action",
+            "source_table": name,
+            "category": spec["category"],
+            "variable_name": _item_names(rows.code),
+            "numeric_value": numeric,
+            "text_value": text,
+            "unit": unit,
+            "end_timestamp": end.where(interval),
+            "end_timestamp_hours": hours(end).where(interval),
+            "is_continuous": interval,
+        })
+        return frame.loc[keep].astype(OUTPUT_DTYPES)
 
-    df["end_timestamp"] = df["endtime"]
-    outtimes = df["stay_id"].map(outtime_map)
-    exceed_mask = df["end_timestamp"] > outtimes
-    if exceed_mask.any():
-        logger.info("  Clamped %d end_timestamps to icu_outtime", exceed_mask.sum())
-        df.loc[exceed_mask, "end_timestamp"] = outtimes[exceed_mask]
-    df["end_timestamp_hours"] = compute_hours_since_admission(
-        df["end_timestamp"], df["stay_id"], intime_map,
-    )
-
-    df["numeric_value"] = pd.to_numeric(df["amount"], errors="coerce")
-
-    rate_str = df["rate"].astype(str).replace("nan", "")
-    rateuom_str = df["rateuom"].fillna("")
-    cat_str = df["ordercategorydescription"].fillna("")
-    df["text_value"] = np.where(
-        rate_str != "",
-        "rate:" + rate_str + " " + rateuom_str + " | " + cat_str,
-        cat_str,
-    )
-    df["text_value"] = df["text_value"].str.strip(" |")
-
-    df["unit"] = df["amountuom"].fillna("")
-    df["domain"] = "action"
-    df["source_table"] = "inputevents"
-    df["category"] = "fluid_med_input"
-    df["is_continuous"] = True
-
-    result = df[OUTPUT_COLUMNS].copy()
-    logger.info("  Produced %d event rows", len(result))
-
-    del df
-    gc.collect()
-
-    return result
-
-
-def process_procedureevents(
-    paths_config: dict,
-    chunk_stay_ids_set: set,
-    d_items_map: dict[int, str],
-    windows_df: pd.DataFrame,
-    intime_map: dict,
-    outtime_map: dict,
-) -> pd.DataFrame:
-    """Process procedureevents (ICU procedures)."""
-    logger.info("Processing procedureevents (raw, stay_id, continuous)")
-
-    usecols = [
-        "stay_id", "starttime", "endtime", "itemid",
-        "value", "valueuom", "ordercategorydescription", "statusdescription",
-    ]
-
-    df = load_and_filter_raw_table(
-        paths_config, "icu.procedureevents", "stay_id",
-        chunk_stay_ids_set, usecols=usecols,
-    )
-
-    if len(df) == 0:
-        logger.warning("  No procedureevents data found")
-        return empty_events_df()
-
-    n_before = len(df)
-    df = df[df["statusdescription"].isin(VALID_EVENT_STATUS)].reset_index(drop=True)
-    logger.info(
-        "  Status filter: %d -> %d rows (dropped %d)",
-        n_before, len(df), n_before - len(df),
-    )
-
-    if len(df) == 0:
-        return empty_events_df()
-
-    df["starttime"] = pd.to_datetime(df["starttime"])
-    df["endtime"] = pd.to_datetime(df["endtime"])
-    df = clip_to_icu_window(df, windows_df, "starttime")
-
-    if len(df) == 0:
-        return empty_events_df()
-
-    df["variable_name"] = df["itemid"].map(d_items_map)
-    unmapped = df["variable_name"].isna()
-    if unmapped.any():
-        logger.warning("  %d rows with unmapped itemid", unmapped.sum())
-        df.loc[unmapped, "variable_name"] = (
-            "unknown_item_" + df.loc[unmapped, "itemid"].astype(str)
-        )
-
-    df["timestamp"] = df["starttime"]
-    df["timestamp_hours"] = compute_hours_since_admission(
-        df["timestamp"], df["stay_id"], intime_map,
-    )
-
-    df["end_timestamp"] = df["endtime"]
-    outtimes = df["stay_id"].map(outtime_map)
-    exceed_mask = df["end_timestamp"] > outtimes
-    if exceed_mask.any():
-        logger.info("  Clamped %d end_timestamps to icu_outtime", exceed_mask.sum())
-        df.loc[exceed_mask, "end_timestamp"] = outtimes[exceed_mask]
-    df["end_timestamp_hours"] = compute_hours_since_admission(
-        df["end_timestamp"], df["stay_id"], intime_map,
-    )
-
-    df["numeric_value"] = pd.to_numeric(df["value"], errors="coerce")
-    df["text_value"] = df["ordercategorydescription"].fillna("")
-    df["unit"] = df["valueuom"].fillna("")
-    df["domain"] = "action"
-    df["source_table"] = "procedureevents"
-    df["category"] = "procedure"
-    df["is_continuous"] = True
-
-    result = df[OUTPUT_COLUMNS].copy()
-    logger.info("  Produced %d event rows", len(result))
-
-    del df
-    gc.collect()
-
-    return result
-
-
-def process_prescriptions(
-    paths_config: dict,
-    chunk_hadm_ids_set: set,
-    hadm_windows_df: pd.DataFrame,
-    intime_map: dict,
-    outtime_map: dict,
-) -> pd.DataFrame:
-    """Process prescriptions (medication orders, hospital level)."""
-    logger.info("Processing prescriptions (raw, hadm_id, continuous)")
-
-    usecols = [
-        "hadm_id", "starttime", "stoptime",
-        "drug", "prod_strength", "dose_val_rx", "dose_unit_rx", "route",
-    ]
-
-    df = load_and_filter_raw_table(
-        paths_config, "hosp.prescriptions", "hadm_id",
-        chunk_hadm_ids_set, usecols=usecols,
-    )
-
-    if len(df) == 0:
-        logger.warning("  No prescriptions data found")
-        return empty_events_df()
-
-    df = assign_stay_ids_from_hadm(df, hadm_windows_df, "starttime")
-
-    if len(df) == 0:
-        logger.warning("  No prescriptions rows matched ICU windows")
-        return empty_events_df()
-
-    df["stoptime"] = pd.to_datetime(df["stoptime"])
-    bad_order = df["starttime"] > df["stoptime"]
-    if bad_order.any():
-        logger.info(
-            "  Dropped %d rows with starttime > stoptime", bad_order.sum(),
-        )
-        df = df[~bad_order].reset_index(drop=True)
-
-    if len(df) == 0:
-        return empty_events_df()
-
-    df["variable_name"] = df["drug"].fillna("unknown_drug")
-    df["timestamp"] = df["starttime"]
-    df["timestamp_hours"] = compute_hours_since_admission(
-        df["timestamp"], df["stay_id"], intime_map,
-    )
-
-    df["end_timestamp"] = df["stoptime"]
-    outtimes = df["stay_id"].map(outtime_map)
-    exceed_mask = df["end_timestamp"].notna() & (df["end_timestamp"] > outtimes)
-    if exceed_mask.any():
-        logger.info("  Clamped %d end_timestamps to icu_outtime", exceed_mask.sum())
-        df.loc[exceed_mask, "end_timestamp"] = outtimes[exceed_mask]
-    df["end_timestamp_hours"] = compute_hours_since_admission(
-        df["end_timestamp"], df["stay_id"], intime_map,
-    )
-
-    df["numeric_value"] = pd.to_numeric(df["dose_val_rx"], errors="coerce")
-
-    route_str = df["route"].fillna("")
-    strength_str = df["prod_strength"].fillna("")
-    df["text_value"] = np.where(
-        route_str != "",
-        "route:" + route_str + " | " + strength_str,
-        strength_str,
-    )
-    df["text_value"] = df["text_value"].str.strip(" |")
-
-    df["unit"] = df["dose_unit_rx"].fillna("")
-    df["domain"] = "action"
-    df["source_table"] = "prescriptions"
-    df["category"] = "medication_order"
-    df["is_continuous"] = True
-
-    result = df[OUTPUT_COLUMNS].copy()
-    logger.info("  Produced %d event rows", len(result))
-
-    del df
-    gc.collect()
-
-    return result
-
-
-def process_emar(
-    paths_config: dict,
-    chunk_hadm_ids_set: set,
-    hadm_windows_df: pd.DataFrame,
-    intime_map: dict,
-) -> pd.DataFrame:
-    """Process emar (medication administration records)."""
-    logger.info("Processing emar (raw, hadm_id, point events)")
-
-    usecols = ["hadm_id", "charttime", "medication", "event_txt"]
-
-    df = load_and_filter_raw_table(
-        paths_config, "hosp.emar", "hadm_id",
-        chunk_hadm_ids_set, usecols=usecols,
-    )
-
-    if len(df) == 0:
-        logger.warning("  No emar data found")
-        return empty_events_df()
-
-    n_before = len(df)
-    df = df[df["event_txt"].isin(VALID_EMAR_EVENTS)].reset_index(drop=True)
-    logger.info(
-        "  Event filter (Administered/Applied): %d -> %d rows (dropped %d)",
-        n_before, len(df), n_before - len(df),
-    )
-
-    if len(df) == 0:
-        return empty_events_df()
-
-    df = assign_stay_ids_from_hadm(df, hadm_windows_df, "charttime")
-
-    if len(df) == 0:
-        logger.warning("  No emar rows matched ICU windows")
-        return empty_events_df()
-
-    df["variable_name"] = df["medication"].fillna("unknown_medication")
-    df["timestamp"] = df["charttime"]
-    df["timestamp_hours"] = compute_hours_since_admission(
-        df["timestamp"], df["stay_id"], intime_map,
-    )
-
-    df["numeric_value"] = np.nan
-    df["text_value"] = df["event_txt"].fillna("")
-    df["unit"] = ""
-    df["end_timestamp"] = pd.NaT
-    df["end_timestamp_hours"] = np.nan
-    df["domain"] = "action"
-    df["source_table"] = "emar"
-    df["category"] = "medication_admin"
-    df["is_continuous"] = False
-
-    result = df[OUTPUT_COLUMNS].copy()
-    logger.info("  Produced %d event rows", len(result))
-
-    del df
-    gc.collect()
-
-    return result
+    if start is None:
+        return events(slice(None), rows.time, end, numeric, text, unit)
+    stated = _rate_text(rows, text_columns).ne("") if "rate" in text_columns else pd.Series(True, index=rows.index)
+    running = events(stated, rows.time, end, np.nan, text, "")
+    if "numeric_value" not in spec:
+        return running
+    known = pd.concat([rows._end, pd.to_datetime(optional_column(rows, "available_time"))], axis=1).max(axis=1)
+    result = events(numeric.notna() & (known < outtime), known, pd.NaT, numeric, text.where(~stated, ""), unit)
+    return pd.concat([running, result], ignore_index=True)
 
 
 def main() -> None:
-    args = extraction_args(__doc__)
+    args = extraction_args(__doc__, weavehr=True)
     setup_logging()
-    paths_config = load_config(args.paths_config)
+    paths_config = data_paths(args)
     features_config = load_config(args.features_config)
 
     stay_ids, cohort = load_chunk_cohort(paths_config, args.chunk_idx, args.total_chunks)
-    stay_id_set = set(stay_ids.tolist())
-    hadm_id_set = set(cohort["hadm_id"].tolist())
+    subject_id_set = set(cohort["subject_id"].tolist())
     intime_map = build_intime_map(cohort)
     outtime_map = build_outtime_map(cohort)
     windows_df = build_icu_windows(cohort)
-    hadm_windows_df = build_hadm_windows(cohort)
-    d_items_map = load_d_items(paths_config)
+    project = Project(paths_config)
 
     output_dir = ensure_dir(resolve_table_path(paths_config, "output.actions"))
 
     all_events: dict[int, list[pd.DataFrame]] = {}
-    for source_name, source_config in features_config["actions"].items():
-        if not source_config.get("is_raw_table", False):
-            events = process_concepts_action_source(
-                source_name, source_config, paths_config,
-                stay_id_set, windows_df, intime_map, outtime_map,
-            )
-        elif source_name == "inputevents":
-            events = process_inputevents(
-                paths_config, stay_id_set, d_items_map, windows_df, intime_map, outtime_map,
-            )
-        elif source_name == "procedureevents":
-            events = process_procedureevents(
-                paths_config, stay_id_set, d_items_map, windows_df, intime_map, outtime_map,
-            )
-        elif source_name == "prescriptions":
-            events = process_prescriptions(
-                paths_config, hadm_id_set, hadm_windows_df, intime_map, outtime_map,
-            )
-        elif source_name == "emar":
-            events = process_emar(paths_config, hadm_id_set, hadm_windows_df, intime_map)
-        else:
-            raise ValueError(f"no handler for raw action source {source_name!r}")
+    for rule in features_config["actions"]:
+        events = process_action_concept(
+            rule, project, subject_id_set, windows_df, intime_map, outtime_map,
+        )
         add_events(all_events, events)
         del events
         gc.collect()
+    # Unharmonised source records the dataset file declares, unless the feature profile switches them off.
+    if features_config.get("raw_actions", {}).get("enabled", True):
+        for name, spec in project.profile.get("raw_actions", {}).items():
+            events = source_records(
+                project, name, spec, subject_id_set, windows_df, intime_map, outtime_map,
+            )
+            add_events(all_events, events)
 
     write_stay_events(all_events, stay_ids, output_dir)
 
