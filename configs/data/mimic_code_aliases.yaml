@@ -1,0 +1,330 @@
+# Names of the original mimic-code pipeline for each WeavEHR concept. Used only
+# by scripts/compare_mimic_demo.py to line the original events up with the
+# concept-keyed ones; nothing in the pipeline reads this file.
+#   unit    corrects an original unit label whose values already have this unit
+#   levels  original text values of a categorical variable
+# The six SOFA components have no entry: WeavEHR scores the current hour,
+# mimic-code the worst value of the last 24 hours.
+concepts:
+  CO2_partial_pressure:
+    source_table: bg
+    variable_name: pco2
+  O2_partial_pressure:
+    source_table: bg
+    variable_name: po2
+  base_excess:
+    source_table: bg
+    variable_name: baseexcess
+  calcium_ionized:
+    source_table: bg
+    variable_name: calcium
+    unit: mmol/L
+  lactate:
+    source_table: bg
+    variable_name: lactate
+  pH_of_blood:
+    source_table: bg
+    variable_name: ph
+  totcal_CO2:
+    source_table: bg
+    variable_name: totalco2
+  C_reactive_protein:
+    source_table: inflammation
+    variable_name: crp
+  alanine_aminotransferase:
+    source_table: enzyme
+    variable_name: alt
+  albumin:
+    source_table: chemistry
+    variable_name: albumin
+  alkaline_phosphatase:
+    source_table: enzyme
+    variable_name: alp
+  amylase:
+    source_table: enzyme
+    variable_name: amylase
+  anion_gap:
+    source_table: chemistry
+    variable_name: aniongap
+  aspartate_aminotransferase:
+    source_table: enzyme
+    variable_name: ast
+  bicarbonate:
+    source_table: chemistry
+    variable_name: bicarbonate
+  bilirubin_direct:
+    source_table: enzyme
+    variable_name: bilirubin_direct
+  bilirubin_indirect:
+    source_table: enzyme
+    variable_name: bilirubin_indirect
+  blood_urea_nitrogen:
+    source_table: chemistry
+    variable_name: bun
+  calcium:
+    source_table: chemistry
+    variable_name: calcium
+  chloride:
+    source_table: chemistry
+    variable_name: chloride
+  creatine_kinase:
+    source_table: enzyme
+    variable_name: ck_cpk
+  creatine_kinase_MB:
+    source_table: enzyme
+    variable_name: ck_mb
+  creatinine:
+    source_table: chemistry
+    variable_name: creatinine
+  gamma_glutamyl_transferase:
+    source_table: enzyme
+    variable_name: ggt
+  glucose:
+    source_table: chemistry
+    variable_name: glucose
+  lactate_dehydrogenase:
+    source_table: enzyme
+    variable_name: ld_ldh
+  nt_pro_bnp:
+    source_table: cardiac_marker
+    variable_name: ntprobnp
+  potassium:
+    source_table: chemistry
+    variable_name: potassium
+  sodium:
+    source_table: chemistry
+    variable_name: sodium
+  total_bilirubin:
+    source_table: enzyme
+    variable_name: bilirubin_total
+  total_protein:
+    source_table: chemistry
+    variable_name: total_protein
+  troponin_t:
+    source_table: cardiac_marker
+    variable_name: troponin_t
+  patient_height:
+    source_table: height
+    variable_name: height
+  patient_weight:
+    source_table: weight
+    variable_name: weight
+  band_form_neutrophils:
+    source_table: blood_differential
+    variable_name: bands
+  basophils_absolute:
+    source_table: blood_differential
+    variable_name: basophils_abs
+  d_dimer:
+    source_table: coagulation
+    variable_name: d_dimer
+  eosinophils_absolute:
+    source_table: blood_differential
+    variable_name: eosinophils_abs
+  erythrocyte_distribution_width:
+    source_table: complete_blood_count
+    variable_name: rdw
+  erythrocyte_distribution_width_sd:
+    source_table: complete_blood_count
+    variable_name: rdwsd
+  fibrinogen:
+    source_table: coagulation
+    variable_name: fibrinogen
+  hematocrit:
+    source_table: complete_blood_count
+    variable_name: hematocrit
+  hemoglobin:
+    source_table: complete_blood_count
+    variable_name: hemoglobin
+  immature_granulocytes:
+    source_table: blood_differential
+    variable_name: immature_granulocytes
+  lymphocytes_absolute:
+    source_table: blood_differential
+    variable_name: lymphocytes_abs
+  mean_corpuscular_hemoglobin:
+    source_table: complete_blood_count
+    variable_name: mch
+  mean_corpuscular_hemoglobin_concentration:
+    source_table: complete_blood_count
+    variable_name: mchc
+  mean_corpuscular_volume:
+    source_table: complete_blood_count
+    variable_name: mcv
+  monocytes_absolute:
+    source_table: blood_differential
+    variable_name: monocytes_abs
+  neutrophils_absolute:
+    source_table: blood_differential
+    variable_name: neutrophils_abs
+  nucleated_red_blood_cells:
+    source_table: blood_differential
+    variable_name: nrbc
+  partial_thromboplastin_time:
+    source_table: coagulation
+    variable_name: ptt
+  platelet_count:
+    source_table: complete_blood_count
+    variable_name: platelet
+  prothrombin_time_international_normalized_ratio:
+    source_table: coagulation
+    variable_name: inr
+  prothrombine_time:
+    source_table: coagulation
+    variable_name: pt
+  red_blood_cell_count:
+    source_table: complete_blood_count
+    variable_name: rbc
+  thrombin_time:
+    source_table: coagulation
+    variable_name: thrombin
+  white_blood_cell_count:
+    source_table: complete_blood_count
+    variable_name: wbc
+  gcs:
+    source_table: gcs
+    variable_name: gcs
+  gcs_eye:
+    source_table: gcs
+    variable_name: gcs_eyes
+  gcs_motor:
+    source_table: gcs
+    variable_name: gcs_motor
+  gcs_verbal:
+    source_table: gcs
+    variable_name: gcs_verbal
+  aki:
+    source_table: kdigo_stages
+    variable_name: aki_stage
+  sofa:
+    source_table: sofa
+    variable_name: sofa_24hours
+  urine_output:
+    source_table: urine_output
+    variable_name: urineoutput
+  arterial_oxygen_saturation:
+    source_table: bg
+    variable_name: so2
+  oxygen_saturation:
+    source_table: vitalsign
+    variable_name: spo2
+  respiratory_rate:
+    source_table: vitalsign
+    variable_name: resp_rate
+  diastolic_blood_pressure:
+    source_table: vitalsign
+    variable_name: dbp
+  heart_rate:
+    source_table: vitalsign
+    variable_name: heart_rate
+  mean_arterial_pressure:
+    source_table: vitalsign
+    variable_name: mbp
+  systolic_blood_pressure:
+    source_table: vitalsign
+    variable_name: sbp
+  temperature:
+    source_table: vitalsign
+    variable_name: temperature
+  fraction_of_inspired_oxygen:
+    source_table: ventilator_setting
+    variable_name: fio2
+  antibiotics:
+    source_table: antibiotic
+    variable_name: antibiotic
+  dobutamine_rate:
+    source_table: vasoactive_agent
+    variable_name: dobutamine
+  dopamine_rate:
+    source_table: vasoactive_agent
+    variable_name: dopamine
+  epinephrine_rate:
+    source_table: vasoactive_agent
+    variable_name: epinephrine
+  norepinephrine_rate:
+    source_table: vasoactive_agent
+    variable_name: norepinephrine
+  phenylephrine_rate:
+    source_table: vasoactive_agent
+    variable_name: phenylephrine
+    unit: mcg/kg/min
+  vasopressin_rate:
+    source_table: vasoactive_agent
+    variable_name: vasopressin
+    unit: units/hour
+  crrt_access_pressure:
+    source_table: crrt
+    variable_name: access_pressure
+  crrt_blood_flow:
+    source_table: crrt
+    variable_name: blood_flow
+  crrt_citrate:
+    source_table: crrt
+    variable_name: citrate
+  crrt_current_goal:
+    source_table: crrt
+    variable_name: current_goal
+  crrt_dialysate_rate:
+    source_table: crrt
+    variable_name: dialysate_rate
+  crrt_effluent_pressure:
+    source_table: crrt
+    variable_name: effluent_pressure
+  crrt_filter_pressure:
+    source_table: crrt
+    variable_name: filter_pressure
+  crrt_heparin_dose:
+    source_table: crrt
+    variable_name: heparin_dose
+  crrt_hourly_patient_fluid_removal:
+    source_table: crrt
+    variable_name: hourly_patient_fluid_removal
+  crrt_postfilter_replacement_rate:
+    source_table: crrt
+    variable_name: postfilter_replacement_rate
+  crrt_prefilter_replacement_rate:
+    source_table: crrt
+    variable_name: prefilter_replacement_rate
+  crrt_replacement_rate:
+    source_table: crrt
+    variable_name: replacement_rate
+  crrt_return_pressure:
+    source_table: crrt
+    variable_name: return_pressure
+  crrt_ultrafiltrate_output:
+    source_table: crrt
+    variable_name: ultrafiltrate_output
+  oxygen_flow_rate:
+    source_table: oxygen_delivery
+    variable_name: o2_flow
+  oxygen_flow_rate_additional:
+    source_table: oxygen_delivery
+    variable_name: o2_flow_additional
+  positive_end_expiratory_pressure:
+    source_table: ventilator_setting
+    variable_name: peep
+  ventilator_flow_rate:
+    source_table: ventilator_setting
+    variable_name: flow_rate
+  ventilator_minute_volume:
+    source_table: ventilator_setting
+    variable_name: minute_volume
+  ventilator_plateau_pressure:
+    source_table: ventilator_setting
+    variable_name: plateau_pressure
+  ventilator_tidal_volume_observed:
+    source_table: ventilator_setting
+    variable_name: tidal_volume_observed
+  ventilator_tidal_volume_set:
+    source_table: ventilator_setting
+    variable_name: tidal_volume_set
+  ventilator_tidal_volume_spontaneous:
+    source_table: ventilator_setting
+    variable_name: tidal_volume_spontaneous
+  ventilation:
+    source_table: ventilation
+    variable_name: ventilation_status
+levels:
+  ventilation:
+    InvasiveVent: invasive
+    NonInvasiveVent: noninvasive
