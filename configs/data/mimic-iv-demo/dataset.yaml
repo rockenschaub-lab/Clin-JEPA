@@ -1,0 +1,2 @@
+# The public demo is a subset of MIMIC-IV with the same tables, as in WeavEHR.
+extends: mimic-iv

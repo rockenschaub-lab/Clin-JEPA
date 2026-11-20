@@ -1,0 +1,14 @@
+cohort:
+  stays:
+    table: visit_occurrence
+    start: VISIT_START
+    end: VISIT_END
+    id: visit_occurrence_id
+    filters:
+      care_site_id:
+      - '1'
+    code_regex: (^|//)32037(//|$)
+# Columns that tie the rate updates of one infusion, and the start and end of one
+# ventilation, together.
+rate_record_id: drug_exposure_id
+ventilation_record_id: record_id

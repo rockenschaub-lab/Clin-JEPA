@@ -1,0 +1,80 @@
+cohort:
+  stays:
+    table: icustay
+    start: icu_admission
+    end: icu_discharge
+    id: stay_id
+    admission_id: hadm_id
+  hospital_mortality:
+    table: admissions
+    event: IN_HOSPITAL_MORTALITY
+    key: hadm_id
+    value: numeric_value
+  # Death, discharge and readmission outcomes from the linked hospital
+  # records. Declaring them asserts that a missing death record
+  # or later admission is a negative, which holds for MIMIC-IV's linked
+  # follow-up; do not copy this to a source without it.
+  outcomes:
+    death:
+      table: patients
+      event: MEDS_DEATH
+      # WeavEHR stamps a date-only death (patients.dod) with this time of day.
+      date_only_time: '23:59:59'
+    hospital_admission:
+      table: admissions
+      event: HOSPITAL_ADMISSION
+    hospital_discharge:
+      table: admissions
+      event: HOSPITAL_DISCHARGE
+      home: [HOME, HOME HEALTH CARE]
+# Columns that tie the rate updates of one infusion, and the start and end of one
+# ventilation, together.
+rate_record_id: linkorderid
+ventilation_record_id: orderid
+# Unharmonised source records for the action text (features.yaml: raw_actions),
+# keyed by extraction table. Each entry reads the extracted event that has one
+# row per source record:
+#   start          second event of the same record that carries its start time;
+#                  ids are the record identifiers both events share
+#   time/end_time  columns holding the interval, where the event time is neither
+#   keep           values a column must have
+#   text           columns packed into the event text
+# A record with a start event states only what that event knows (text reads
+# start.<column>) while it runs. Its numeric_value comes from the end event and
+# is stated once that is available, never during the record it summarises.
+raw_actions:
+  inputevents:
+    category: fluid_med_input
+    table: inputevents
+    event: INFUSION_END
+    start: {event: INFUSION_START, ids: [orderid]}
+    keep: {text_value: [FinishedRunning, Paused, Stopped]}
+    numeric_value: amount
+    unit: amountuom
+    # originalrate is the rate entered when the record started; rate and amount
+    # are what was delivered by its end.
+    text: {rate: start.originalrate, rate_unit: start.rateuom, detail: start.ordercategorydescription}
+  procedureevents:
+    category: procedure
+    table: procedureevents
+    event: PROCEDURE_END
+    start: {event: PROCEDURE_START, ids: [orderid]}
+    keep: {text_value: [FinishedRunning, Paused, Stopped]}
+    numeric_value: value
+    unit: valueuom
+    text: {detail: start.ordercategorydescription}
+  prescriptions:
+    category: medication_order
+    table: prescriptions
+    event: MEDICATION_ORDER
+    time: prescribed_start
+    end_time: prescribed_end
+    numeric_value: dose
+    unit: dose_uom
+    text: {route: route, detail: text_value}
+  emar:
+    category: medication_admin
+    table: emar
+    event: MEDICATION_ADMINISTRATION
+    keep: {text_value: [Administered, Applied]}
+    text: {detail: text_value}

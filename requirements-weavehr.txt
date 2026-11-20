@@ -1,0 +1,6 @@
+# Separate Python >=3.13 preprocessing environment; run from the repository.
+# Pin clinical definitions as well as the WeavEHR API.
+weavehr @ git+https://github.com/aidh-ms/WeavEHR.git@c163e2dd8eb9a389c8b01f1657a635f1118d0279
+numpy>=2,<3
+pandas>=2.2,<3
+pyyaml>=6,<7
