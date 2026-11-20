@@ -31,4 +31,4 @@ state_text:
     - weight_type
     - o2_delivery_device_1
 
-sofa: {variable_name: sofa_24hours, source_table: sofa}
+sofa: {variable_name: sofa, source_table: concept}

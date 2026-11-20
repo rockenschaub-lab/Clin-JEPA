@@ -2,6 +2,11 @@
 
 import pandas as pd
 
+# ``source_table`` of a harmonised WeavEHR concept, whose ``variable_name`` is
+# the concept name. Any other value names the extraction table that an
+# unharmonised source record was read from.
+CONCEPT_SOURCE = "concept"
+
 OUTPUT_COLUMNS = [
     "stay_id",
     "timestamp",

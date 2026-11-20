@@ -1,370 +1,709 @@
-# Source tables, columns and categories of the extracted observations and interventions.
-
+# Shared WeavEHR concepts of both datasets, keyed by concept name. No
+# source-specific code or clinical unit mapping belongs here.
+#
+# Each entry names a WeavEHR concept and says how its events are written:
+#   concept       WeavEHR concept; also the event's variable_name
+#   name          variable_name where two concepts form one variable
+#   unit          unit WeavEHR must emit; any other unit stops the run
+#   output_unit   unit label written out, where it differs from `unit`
+#   display_name  name in the state and action text
+# The order of the entries is their order in the text of an hour.
+schema_version: 3
 temporal:
   step_size_hours: 1
   max_steps: 336
   min_obs_per_stay: 1
-
 observations:
-  vitalsign:
-    source: concepts.measurement.vitalsign
-    timestamp_col: charttime
-    join_col: stay_id
-    category: vitals
-    value_cols:
-      - heart_rate
-      - sbp
-      - dbp
-      - mbp
-      - sbp_ni
-      - dbp_ni
-      - mbp_ni
-      - resp_rate
-      - temperature
-      - spo2
-      - glucose
-
-  bg:
-    source: concepts.measurement.bg
-    timestamp_col: charttime
-    join_col: subject_id
-    category: blood_gas
-    row_filter:
-      column: specimen
-      values: ["ART."]
-    value_cols:
-      - so2
-      - po2
-      - pco2
-      - fio2
-      - fio2_chartevents
-      - ph
-      - baseexcess
-      - bicarbonate
-      - totalco2
-      - hematocrit
-      - hemoglobin
-      - chloride
-      - calcium
-      - potassium
-      - sodium
-      - lactate
-      - glucose
-      - aado2
-      - aado2_calc
-      - pao2fio2ratio
-
-  chemistry:
-    source: concepts.measurement.chemistry
-    timestamp_col: charttime
-    join_col: subject_id
-    category: labs
-    value_cols:
-      - albumin
-      - globulin
-      - total_protein
-      - aniongap
-      - bicarbonate
-      - bun
-      - calcium
-      - chloride
-      - creatinine
-      - glucose
-      - sodium
-      - potassium
-
-  complete_blood_count:
-    source: concepts.measurement.complete_blood_count
-    timestamp_col: charttime
-    join_col: subject_id
-    category: labs
-    value_cols:
-      - hematocrit
-      - hemoglobin
-      - mch
-      - mchc
-      - mcv
-      - platelet
-      - rbc
-      - rdw
-      - rdwsd
-      - wbc
-
-  coagulation:
-    source: concepts.measurement.coagulation
-    timestamp_col: charttime
-    join_col: subject_id
-    category: labs
-    value_cols:
-      - d_dimer
-      - fibrinogen
-      - thrombin
-      - inr
-      - pt
-      - ptt
-
-  enzyme:
-    source: concepts.measurement.enzyme
-    timestamp_col: charttime
-    join_col: subject_id
-    category: labs
-    value_cols: all
-
-  inflammation:
-    source: concepts.measurement.inflammation
-    timestamp_col: charttime
-    join_col: subject_id
-    category: labs
-    value_cols: all
-
-  cardiac_marker:
-    source: concepts.measurement.cardiac_marker
-    timestamp_col: charttime
-    join_col: subject_id
-    category: labs
-    value_cols: all
-
-  gcs:
-    source: concepts.measurement.gcs
-    timestamp_col: charttime
-    join_col: stay_id
-    category: assessment
-    value_cols: all
-
-  urine_output:
-    source: concepts.measurement.urine_output
-    timestamp_col: charttime
-    join_col: stay_id
-    category: output
-    value_cols:
-      - urineoutput
-
-  urine_output_rate:
-    source: concepts.measurement.urine_output_rate
-    timestamp_col: charttime
-    join_col: stay_id
-    category: output
-    value_cols:
-      - uo
-      - urineoutput_6hr
-      - urineoutput_12hr
-      - urineoutput_24hr
-      - uo_mlkghr_6hr
-      - uo_mlkghr_12hr
-      - uo_mlkghr_24hr
-      - weight
-
-  kdigo_stages:
-    source: concepts.organfailure.kdigo_stages
-    timestamp_col: charttime
-    join_col: stay_id
-    category: organ_failure
-    value_cols:
-      - creat
-      - creat_low_past_7day
-      - creat_low_past_48hr
-      - aki_stage_creat
-      - uo_rt_6hr
-      - uo_rt_12hr
-      - uo_rt_24hr
-      - aki_stage_uo
-      - aki_stage_crrt
-      - aki_stage
-      - aki_stage_smoothed
-
-  oxygen_delivery:
-    source: concepts.measurement.oxygen_delivery
-    timestamp_col: charttime
-    join_col: stay_id
-    category: vitals
-    value_cols:
-      - o2_flow
-      - o2_flow_additional
-      - o2_delivery_device_1
-
-  blood_differential:
-    source: concepts.measurement.blood_differential
-    timestamp_col: charttime
-    join_col: subject_id
-    category: labs
-    value_cols:
-      - wbc
-      - neutrophils_abs
-      - lymphocytes_abs
-      - monocytes_abs
-      - eosinophils_abs
-      - basophils_abs
-      - bands
-      - immature_granulocytes
-      - nrbc
-
-  height:
-    source: concepts.measurement.height
-    timestamp_col: charttime
-    join_col: stay_id
-    category: vitals
-    value_cols:
-      - height
-
-  weight:
-    source: concepts.demographics.weight_durations
-    timestamp_col: starttime
-    join_col: stay_id
-    category: vitals
-    value_cols:
-      - weight
-      - weight_type
-
-  sofa:
-    source: concepts.score.sofa
-    timestamp_col: starttime
-    join_col: stay_id
-    category: score
-    value_cols:
-      - sofa_24hours
-      - respiration_24hours
-      - coagulation_24hours
-      - liver_24hours
-      - cardiovascular_24hours
-      - cns_24hours
-      - renal_24hours
-
-  rhythm:
-    source: concepts.measurement.rhythm
-    timestamp_col: charttime
-    join_col: subject_id
-    category: vitals
-    value_cols:
-      - heart_rhythm
-      - ectopy_type
-      - ectopy_frequency
-
-diagnoses:
-  source: hosp.diagnoses_icd
-  titles: hosp.d_icd_diagnoses
-  category: diagnosis
-
+- concept: sofa
+  version: 1.0.0
+  category: score
+  unit: points
+  output_unit: ''
+  display_name: SOFA total
+- concept: sofa_respiratory
+  version: 1.0.0
+  category: score
+  unit: points
+  output_unit: ''
+  display_name: SOFA respiration (current)
+- concept: sofa_coagulation
+  version: 1.0.0
+  category: score
+  unit: points
+  output_unit: ''
+  display_name: SOFA coagulation (current)
+- concept: sofa_liver
+  version: 1.0.0
+  category: score
+  unit: points
+  output_unit: ''
+  display_name: SOFA liver (current)
+- concept: sofa_cardiovascular
+  version: 1.0.0
+  category: score
+  unit: points
+  output_unit: ''
+  display_name: SOFA cardiovascular (current)
+- concept: sofa_cns
+  version: 1.0.0
+  category: score
+  unit: points
+  output_unit: ''
+  display_name: SOFA CNS (current)
+- concept: sofa_renal
+  version: 1.0.0
+  category: score
+  unit: points
+  output_unit: ''
+  display_name: SOFA renal (current)
+- concept: heart_rate
+  version: 1.0.0
+  category: vital
+  unit: bpm
+  display_name: Heart rate
+- concept: systolic_blood_pressure
+  version: 1.0.0
+  category: vital
+  unit: mmHg
+  display_name: Systolic BP
+- concept: diastolic_blood_pressure
+  version: 1.0.0
+  category: vital
+  unit: mmHg
+  display_name: Diastolic BP
+- concept: mean_arterial_pressure
+  version: 1.0.0
+  category: vital
+  unit: mmHg
+  display_name: MAP
+- concept: respiratory_rate
+  version: 1.0.0
+  category: vital
+  unit: insp/min
+  output_unit: breaths/min
+  display_name: Respiratory rate
+- concept: temperature
+  version: 1.0.0
+  category: vital
+  unit: C
+  output_unit: °C
+  display_name: Temperature
+- concept: oxygen_saturation
+  version: 1.0.0
+  category: vital
+  unit: '%'
+  display_name: SpO2
+- concept: intracranial_pressure
+  version: 1.0.0
+  category: lab
+  unit: mmHg
+  display_name: ICP
+- concept: endtidal_CO2
+  version: 1.0.0
+  category: lab
+  unit: mmHg
+  display_name: EtCO2
+- concept: patient_height
+  version: 1.0.0
+  category: demographic
+  unit: cm
+  display_name: Height
+- concept: patient_weight
+  version: 1.0.0
+  category: demographic
+  unit: kg
+  display_name: Weight
+- concept: O2_partial_pressure
+  version: 1.0.0
+  category: lab
+  unit: mmHg
+  display_name: PaO2
+- concept: CO2_partial_pressure
+  version: 1.0.0
+  category: lab
+  unit: mmHg
+  display_name: PaCO2
+- concept: pH_of_blood
+  version: 1.0.0
+  category: lab
+  unit: ''
+  display_name: pH
+- concept: lactate
+  version: 1.0.0
+  category: lab
+  unit: mmol/L
+  display_name: Lactate
+- concept: arterial_oxygen_saturation
+  version: 1.0.0
+  category: lab
+  unit: '%'
+  display_name: SaO2
+- concept: carboxyhemoglobin
+  version: 1.0.0
+  category: lab
+  unit: '%'
+  display_name: Carboxyhemoglobin
+- concept: methemoglobin
+  version: 1.0.0
+  category: lab
+  unit: '%'
+  display_name: Methemoglobin
+- concept: base_excess
+  version: 1.0.0
+  category: lab
+  unit: mEq/L
+  display_name: Base excess
+- concept: totcal_CO2
+  version: 1.0.0
+  category: lab
+  unit: mEq/L
+  display_name: Total CO2
+- concept: calcium_ionized
+  version: 1.0.0
+  category: lab
+  unit: mmol/L
+  display_name: Calcium (ABG)
+- concept: creatinine
+  version: 1.0.0
+  category: lab
+  unit: mg/dL
+  display_name: Creatinine
+- concept: blood_urea_nitrogen
+  version: 1.0.0
+  category: lab
+  unit: mg/dL
+  display_name: BUN
+- concept: albumin
+  version: 1.0.0
+  category: lab
+  unit: g/dL
+  display_name: Albumin
+- concept: total_protein
+  version: 1.0.0
+  category: lab
+  unit: g/dL
+  display_name: Total protein
+- concept: anion_gap
+  version: 1.0.0
+  category: lab
+  unit: mEq/L
+  display_name: Anion gap
+- concept: bicarbonate
+  version: 1.0.0
+  category: lab
+  unit: mEq/L
+  display_name: Bicarbonate
+- concept: calcium
+  version: 1.0.0
+  category: lab
+  unit: mg/dL
+  display_name: Calcium
+- concept: chloride
+  version: 1.0.0
+  category: lab
+  unit: mEq/L
+  display_name: Chloride
+- concept: glucose
+  version: 1.0.0
+  category: lab
+  unit: mg/dL
+  display_name: Glucose (chem)
+- concept: Hemoglobin_A1C
+  version: 1.0.0
+  category: lab
+  unit: '%'
+  display_name: HbA1c
+- concept: sodium
+  version: 1.0.0
+  category: lab
+  unit: mEq/L
+  display_name: Sodium
+- concept: potassium
+  version: 1.0.0
+  category: lab
+  unit: mEq/L
+  display_name: Potassium
+- concept: magnesium
+  version: 1.0.0
+  category: lab
+  unit: mg/dL
+  display_name: Magnesium
+- concept: phosphate
+  version: 1.0.0
+  category: lab
+  unit: mg/dL
+  display_name: Phosphate
+- concept: white_blood_cell_count
+  version: 1.0.0
+  category: lab
+  unit: K/uL
+  display_name: WBC count
+- concept: hemoglobin
+  version: 1.0.0
+  category: lab
+  unit: g/dL
+  display_name: Hemoglobin
+- concept: hematocrit
+  version: 1.0.0
+  category: lab
+  unit: '%'
+  display_name: Hematocrit
+- concept: platelet_count
+  version: 1.0.0
+  category: lab
+  unit: K/uL
+  display_name: Platelet count
+- concept: red_blood_cell_count
+  version: 1.0.0
+  category: lab
+  unit: m/uL
+  output_unit: M/uL
+  display_name: RBC count
+- concept: mean_corpuscular_hemoglobin
+  version: 1.0.0
+  category: lab
+  unit: pg
+  display_name: MCH
+- concept: mean_corpuscular_hemoglobin_concentration
+  version: 1.0.0
+  category: lab
+  unit: '%'
+  display_name: MCHC
+- concept: mean_corpuscular_volume
+  version: 1.0.0
+  category: lab
+  unit: fL
+  display_name: MCV
+- concept: erythrocyte_distribution_width
+  version: 1.0.0
+  category: lab
+  unit: '%'
+  display_name: RDW
+- concept: erythrocyte_distribution_width_sd
+  version: 1.0.0
+  category: lab
+  unit: fL
+  display_name: RDW-SD
+- concept: prothrombin_time_international_normalized_ratio
+  version: 1.0.0
+  category: lab
+  unit: ''
+  display_name: INR
+- concept: prothrombine_time
+  version: 1.0.0
+  category: lab
+  unit: sec
+  display_name: PT
+- concept: partial_thromboplastin_time
+  version: 1.0.0
+  category: lab
+  unit: sec
+  display_name: PTT
+- concept: d_dimer
+  version: 1.0.0
+  category: lab
+  unit: ng/mL
+  display_name: D-dimer
+- concept: fibrinogen
+  version: 1.0.0
+  category: lab
+  unit: mg/dL
+  display_name: Fibrinogen
+- concept: thrombin_time
+  version: 1.0.0
+  category: lab
+  unit: sec
+  display_name: Thrombin time
+- concept: alanine_aminotransferase
+  version: 1.0.0
+  category: lab
+  unit: IU/L
+  display_name: ALT
+- concept: aspartate_aminotransferase
+  version: 1.0.0
+  category: lab
+  unit: IU/L
+  display_name: AST
+- concept: alkaline_phosphatase
+  version: 1.0.0
+  category: lab
+  unit: IU/L
+  display_name: ALP
+- concept: total_bilirubin
+  version: 1.0.0
+  category: lab
+  unit: mg/dL
+  display_name: Total bilirubin
+- concept: bilirubin_direct
+  version: 1.0.0
+  category: lab
+  unit: mg/dL
+  display_name: Direct bilirubin
+- concept: bilirubin_indirect
+  version: 1.0.0
+  category: lab
+  unit: mg/dL
+  display_name: Indirect bilirubin
+- concept: amylase
+  version: 1.0.0
+  category: lab
+  unit: IU/L
+  display_name: Amylase
+- concept: creatine_kinase
+  version: 1.0.0
+  category: lab
+  unit: IU/L
+  display_name: CK
+- concept: creatine_kinase_MB
+  version: 1.0.0
+  category: lab
+  unit: ng/mL
+  display_name: CK-MB
+- concept: gamma_glutamyl_transferase
+  version: 1.0.0
+  category: lab
+  unit: IU/L
+  display_name: GGT
+- concept: lactate_dehydrogenase
+  version: 1.0.0
+  category: lab
+  unit: IU/L
+  display_name: LDH
+- concept: C_reactive_protein
+  version: 1.0.0
+  category: lab
+  unit: mg/L
+  display_name: CRP
+- concept: erythrocyte_sedimentation_rate
+  version: 1.0.0
+  category: lab
+  unit: mm/hr
+  display_name: ESR
+- concept: troponin_t
+  version: 1.0.0
+  category: lab
+  unit: ng/mL
+  display_name: Troponin T
+- concept: troponin_I
+  version: 1.0.0
+  category: lab
+  unit: ng/mL
+  display_name: Troponin I
+- concept: nt_pro_bnp
+  version: 1.0.0
+  category: lab
+  unit: pg/mL
+  display_name: NT-proBNP
+- concept: neutrophils_absolute
+  version: 1.0.0
+  category: lab
+  unit: K/uL
+  display_name: Neutrophils
+- concept: lymphocytes_absolute
+  version: 1.0.0
+  category: lab
+  unit: K/uL
+  display_name: Lymphocytes
+- concept: monocytes_absolute
+  version: 1.0.0
+  category: lab
+  unit: K/uL
+  display_name: Monocytes
+- concept: eosinophils_absolute
+  version: 1.0.0
+  category: lab
+  unit: K/uL
+  display_name: Eosinophils
+- concept: basophils_absolute
+  version: 1.0.0
+  category: lab
+  unit: K/uL
+  display_name: Basophils
+- concept: band_form_neutrophils
+  version: 1.0.0
+  category: lab
+  unit: '%'
+  display_name: Bands
+- concept: immature_granulocytes
+  version: 1.0.0
+  category: lab
+  unit: '%'
+  display_name: Immature granulocytes
+- concept: nucleated_red_blood_cells
+  version: 1.0.0
+  category: lab
+  unit: '%'
+  display_name: NRBC
+- concept: neutrophils
+  version: 1.0.0
+  category: lab
+  unit: '%'
+  display_name: Neutrophils (%)
+- concept: lymphocytes
+  version: 1.0.0
+  category: lab
+  unit: '%'
+  display_name: Lymphocytes (%)
+- concept: monocytes
+  version: 1.0.0
+  category: lab
+  unit: '%'
+  display_name: Monocytes (%)
+- concept: eosinophils
+  version: 1.0.0
+  category: lab
+  unit: '%'
+  display_name: Eosinophils (%)
+- concept: basophils
+  version: 1.0.0
+  category: lab
+  unit: '%'
+  display_name: Basophils (%)
+- concept: atypical_lymphocytes
+  version: 1.0.0
+  category: lab
+  unit: '%'
+  display_name: Atypical lymphocytes (%)
+- concept: metamyelocytes
+  version: 1.0.0
+  category: lab
+  unit: '%'
+  display_name: Metamyelocytes (%)
+- concept: gcs
+  version: 1.0.0
+  category: score
+  unit: points
+  output_unit: ''
+  display_name: GCS total
+- concept: gcs_motor
+  version: 1.0.0
+  category: score
+  unit: points
+  output_unit: ''
+  display_name: GCS motor
+- concept: gcs_verbal
+  version: 1.0.0
+  category: score
+  unit: points
+  output_unit: ''
+  display_name: GCS verbal
+- concept: gcs_eye
+  version: 1.0.0
+  category: score
+  unit: points
+  output_unit: ''
+  display_name: GCS eyes
+- concept: Richmond_agitation_sedation_scale
+  version: 1.0.0
+  category: lab
+  unit: ''
+  display_name: RASS
+- concept: urine_output
+  version: 1.0.0
+  category: output
+  unit: mL
+  display_name: Urine output
+- concept: aki
+  version: 1.0.0
+  category: organ_failure
+  unit: points
+  output_unit: ''
+  display_name: AKI stage
 actions:
-  vasoactive_agent:
-    source: concepts.medication.vasoactive_agent
-    timestamp_col: starttime
-    end_col: endtime
-    join_col: stay_id
-    category: vasopressor
-    value_cols:
-      - dopamine
-      - epinephrine
-      - norepinephrine
-      - phenylephrine
-      - vasopressin
-      - dobutamine
-      - milrinone
-    is_continuous: true
-
-  norepinephrine_equivalent_dose:
-    source: concepts.medication.norepinephrine_equivalent_dose
-    timestamp_col: starttime
-    end_col: endtime
-    join_col: stay_id
-    category: vasopressor
-    value_cols:
-      - norepinephrine_equivalent_dose
-    is_continuous: true
-
-  antibiotic:
-    source: concepts.medication.antibiotic
-    timestamp_col: starttime
-    end_col: stoptime
-    join_col: stay_id
-    category: antibiotic
-    value_cols:
-      - antibiotic
-      - route
-
-  ventilation:
-    source: concepts.treatment.ventilation
-    timestamp_col: starttime
-    end_col: endtime
-    join_col: stay_id
-    category: ventilation
-    value_cols:
-      - ventilation_status
-    is_continuous: true
-
-  ventilator_setting:
-    source: concepts.measurement.ventilator_setting
-    timestamp_col: charttime
-    join_col: stay_id
-    category: ventilation_settings
-    value_cols: all
-
-  rrt:
-    source: concepts.treatment.rrt
-    timestamp_col: charttime
-    join_col: stay_id
-    category: dialysis
-    value_cols:
-      - dialysis_present
-      - dialysis_active
-      - dialysis_type
-
-  crrt:
-    source: concepts.treatment.crrt
-    timestamp_col: charttime
-    join_col: stay_id
-    category: dialysis
-    value_cols: all
-
-  invasive_line:
-    source: concepts.treatment.invasive_line
-    timestamp_col: starttime
-    end_col: endtime
-    join_col: stay_id
-    category: procedure
-    value_cols: all
-    is_continuous: true
-
-  neuroblock:
-    source: concepts.medication.neuroblock
-    timestamp_col: starttime
-    end_col: endtime
-    join_col: stay_id
-    category: neuromuscular_blocker
-    value_cols:
-      - drug_rate
-      - drug_amount
-    is_continuous: true
-
-  inputevents:
-    source: icu.inputevents
-    timestamp_col: starttime
-    end_col: endtime
-    join_col: stay_id
-    category: fluid_med_input
-    is_raw_table: true
-    is_continuous: true
-
-  procedureevents:
-    source: icu.procedureevents
-    timestamp_col: starttime
-    end_col: endtime
-    join_col: stay_id
-    category: procedure
-    is_raw_table: true
-    is_continuous: true
-
-  prescriptions:
-    source: hosp.prescriptions
-    timestamp_col: starttime
-    end_col: stoptime
-    join_col: hadm_id
-    category: medication_order
-    is_raw_table: true
-    is_continuous: true
-
-  emar:
-    source: hosp.emar
-    timestamp_col: charttime
-    join_col: hadm_id
-    category: medication_admin
-    is_raw_table: true
+- concept: norepinephrine_rate
+  version: 1.0.0
+  category: vasopressor
+  unit: mcg/kg/min
+  mode: rate_updates
+  display_name: Norepinephrine
+- concept: epinephrine_rate
+  version: 1.0.0
+  category: vasopressor
+  unit: mcg/kg/min
+  mode: rate_updates
+  display_name: Epinephrine
+- concept: dopamine_rate
+  version: 1.0.0
+  category: vasopressor
+  unit: mcg/kg/min
+  mode: rate_updates
+  display_name: Dopamine
+- concept: dobutamine_rate
+  version: 1.0.0
+  category: vasopressor
+  unit: mcg/kg/min
+  mode: rate_updates
+  display_name: Dobutamine
+- concept: phenylephrine_rate
+  version: 1.0.0
+  category: vasopressor
+  unit: mcg/kg/min
+  mode: rate_updates
+  display_name: Phenylephrine
+- concept: vasopressin_rate
+  version: 1.0.0
+  category: vasopressor
+  unit: units/min
+  output_unit: units/hour
+  scale: 60
+  display_name: Vasopressin
+- concept: ventilation_start
+  version: 1.0.0
+  name: ventilation
+  category: ventilation
+  unit: ''
+  mode: paired_markers
+  end_concept: ventilation_end
+  levels:
+  - invasive
+  - noninvasive
+  display_name: Ventilation status
+- concept: fraction_of_inspired_oxygen
+  version: 1.0.0
+  category: ventilation_settings
+  unit: '%'
+  display_name: FiO2
+- concept: positive_end_expiratory_pressure
+  version: 1.0.0
+  category: ventilation_settings
+  unit: cmH2O
+  display_name: PEEP
+- concept: ventilator_plateau_pressure
+  version: 1.0.0
+  category: ventilation_settings
+  unit: cmH2O
+  display_name: Plateau pressure
+- concept: ventilator_tidal_volume_set
+  version: 1.0.0
+  category: ventilation_settings
+  unit: mL
+  display_name: Tidal volume set
+- concept: ventilator_tidal_volume_observed
+  version: 1.0.0
+  category: ventilation_settings
+  unit: mL
+  display_name: Tidal volume observed
+- concept: ventilator_tidal_volume_spontaneous
+  version: 1.0.0
+  category: ventilation_settings
+  unit: mL
+  display_name: Tidal volume spontaneous
+- concept: ventilator_minute_volume
+  version: 1.0.0
+  category: ventilation_settings
+  unit: L/min
+  display_name: Minute volume
+- concept: ventilator_flow_rate
+  version: 1.0.0
+  category: ventilation_settings
+  unit: L/min
+  display_name: Flow rate
+- concept: respiratory_support
+  version: 1.0.0
+  category: respiratory_support
+  unit: ''
+  levels:
+  - invasive
+  - noninvasive
+  - ventilator
+  - high_flow
+  - oxygen
+  - none
+  display_name: Respiratory support
+- concept: oxygen_flow_rate
+  version: 1.0.0
+  category: respiratory_support
+  unit: L/min
+  display_name: O2 flow
+- concept: oxygen_flow_rate_additional
+  version: 1.0.0
+  category: respiratory_support
+  unit: L/min
+  display_name: O2 flow (additional)
+- concept: crrt_blood_flow
+  version: 1.0.0
+  category: dialysis
+  unit: mL/min
+  display_name: CRRT blood flow
+- concept: crrt_dialysate_rate
+  version: 1.0.0
+  category: dialysis
+  unit: mL/hr
+  display_name: CRRT dialysate rate
+- concept: crrt_access_pressure
+  version: 1.0.0
+  category: dialysis
+  unit: mmHg
+  display_name: CRRT access pressure
+- concept: crrt_effluent_pressure
+  version: 1.0.0
+  category: dialysis
+  unit: mmHg
+  display_name: CRRT effluent pressure
+- concept: crrt_filter_pressure
+  version: 1.0.0
+  category: dialysis
+  unit: mmHg
+  display_name: CRRT filter pressure
+- concept: crrt_return_pressure
+  version: 1.0.0
+  category: dialysis
+  unit: mmHg
+  display_name: CRRT return pressure
+- concept: crrt_citrate
+  version: 1.0.0
+  category: dialysis
+  unit: mL/hr
+  display_name: CRRT citrate
+- concept: crrt_current_goal
+  version: 1.0.0
+  category: dialysis
+  unit: mL
+  display_name: CRRT current goal
+- concept: crrt_heparin_dose
+  version: 1.0.0
+  category: dialysis
+  unit: units/hr
+  display_name: CRRT heparin dose
+- concept: crrt_hourly_patient_fluid_removal
+  version: 1.0.0
+  category: dialysis
+  unit: mL
+  display_name: CRRT hourly fluid removal
+- concept: crrt_prefilter_replacement_rate
+  version: 1.0.0
+  category: dialysis
+  unit: mL/hr
+  display_name: CRRT prefilter replacement rate
+- concept: crrt_postfilter_replacement_rate
+  version: 1.0.0
+  category: dialysis
+  unit: mL/hr
+  display_name: CRRT postfilter replacement rate
+- concept: crrt_replacement_rate
+  version: 1.0.0
+  category: dialysis
+  unit: mL/hr
+  display_name: CRRT replacement rate
+- concept: crrt_ultrafiltrate_output
+  version: 1.0.0
+  category: dialysis
+  unit: mL
+  display_name: CRRT ultrafiltrate output
+- concept: antibiotics
+  version: 1.0.0
+  category: medication_admin
+  unit: ''
+  display_name: Antibiotics
+- concept: corticosteroids
+  version: 1.0.0
+  category: medication_admin
+  unit: ''
+  display_name: Corticosteroids
+# Unharmonised source records (infusions, medication orders and
+# administrations, procedures), read from the WeavEHR extraction as they are.
+# Their item names are the source's own, so two datasets do not share them.
+# The dataset profile (configs/data/<dataset>/dataset.yaml) says which extracted events feed
+# them; a dataset without such a declaration contributes none.
+raw_actions:
+  enabled: true
