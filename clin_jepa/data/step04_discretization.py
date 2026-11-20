@@ -10,6 +10,7 @@ import pandas as pd
 
 from clin_jepa.data.helpers.io_utils import chunk_stay_ids, extraction_args, resolve_table_path
 from clin_jepa.data.helpers.schema import validate_schema
+from clin_jepa.data.helpers.source import data_paths
 from clin_jepa.utils import ensure_dir, load_config, setup_logging
 
 logger = logging.getLogger(__name__)
@@ -129,7 +130,7 @@ def discretize_stay(
 def main() -> None:
     args = extraction_args(__doc__)
     setup_logging()
-    paths_config = load_config(args.paths_config)
+    paths_config = data_paths(args)
     temporal = load_config(args.features_config)["temporal"]
     step_size = float(temporal["step_size_hours"])
     max_steps = int(temporal["max_steps"])

@@ -7,20 +7,21 @@ import pandas as pd
 from sklearn.model_selection import train_test_split
 
 from clin_jepa.data.helpers.io_utils import resolve_table_path
-from clin_jepa.utils import ensure_dir, load_config, set_seed, setup_logging
+from clin_jepa.data.helpers.source import data_paths
+from clin_jepa.utils import ensure_dir, set_seed, setup_logging
 
 logger = logging.getLogger(__name__)
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--paths_config", default="configs/data/paths.yaml")
+    parser.add_argument("--data_dir", required=True, help="Directory this pipeline writes to")
     parser.add_argument("--seed", type=int, default=42)
     args = parser.parse_args()
 
     setup_logging()
     set_seed(args.seed)
-    paths_config = load_config(args.paths_config)
+    paths_config = data_paths(args)
     cohort = pd.read_csv(resolve_table_path(paths_config, "output.cohort") / "cohort.csv")
 
     subjects = (

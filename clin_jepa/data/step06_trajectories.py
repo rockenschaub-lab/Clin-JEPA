@@ -15,6 +15,7 @@ from clin_jepa.data.helpers.action_filter import filter_act_events
 from clin_jepa.data.helpers.event_ordering import sort_events
 from clin_jepa.data.helpers.io_utils import resolve_table_path
 from clin_jepa.data.helpers.observation_filter import filter_obs_events
+from clin_jepa.data.helpers.source import data_paths
 from clin_jepa.data.helpers.text_templates import format_event
 from clin_jepa.utils import load_config, setup_logging
 
@@ -188,14 +189,14 @@ def write_chunk(
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", default="configs/data/trajectories.yaml")
-    parser.add_argument("--paths_config", default="configs/data/paths.yaml")
+    parser.add_argument("--data_dir", required=True, help="Directory this pipeline writes to")
     parser.add_argument("--chunk_idx", type=int, default=None)
     parser.add_argument("--n_workers", type=int, default=None)
     args = parser.parse_args()
 
     setup_logging()
     config = load_config(args.config)
-    paths_config = load_config(args.paths_config)
+    paths_config = data_paths(args)
     n_workers = args.n_workers or config["n_workers"]
 
     splits = pd.read_csv(resolve_table_path(paths_config, "output.splits") / "splits.csv")
