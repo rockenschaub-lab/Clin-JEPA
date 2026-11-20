@@ -7,17 +7,10 @@ n_workers: 16
 embedding_dim: 4096
 rollout_horizons: [8, 24, 48]
 
-mimic:
-  icustays: ${MIMIC_RAW}/icu/icustays.csv.gz
-  admissions: ${MIMIC_RAW}/hosp/admissions.csv.gz
-  patients: ${MIMIC_RAW}/hosp/patients.csv.gz
-  ventilation: ${MIMIC_RAW}/concepts/treatment/ventilation.csv
-
 tabular:
   medication_classes: configs/medication_classes.yaml
   trajectory_config: configs/data/trajectories.yaml
   n_items: 150
-  n_ventilator_modes: 8
 
 readout:
   seed: 42

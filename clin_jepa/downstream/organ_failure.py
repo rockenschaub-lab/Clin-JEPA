@@ -5,21 +5,20 @@ import warnings
 import numpy as np
 import pandas as pd
 
+from clin_jepa.data.helpers.schema import CONCEPT_SOURCE
 from clin_jepa.downstream.tasks import BY_NAME
 
-MIN_CHARTED_RATIOS = 5
-MAX_FIO2_FRACTION = 1.5
 
-
-def hourly_means(obs: pd.DataFrame, n_hours: int) -> dict[tuple[str, str], np.ndarray]:
-    """Mean numeric value per (source table, variable) and hour; NaN where nothing was charted."""
+def hourly_means(obs: pd.DataFrame, n_hours: int) -> dict[str, np.ndarray]:
+    """Mean numeric value per concept and hour; NaN where nothing was charted."""
     if obs.empty:
         return {}
-    rows = obs.loc[obs["numeric_value"].notna() & obs["step_idx"].between(0, n_hours - 1)]
-    means = rows.groupby(["source_table", "variable_name", "step_idx"])["numeric_value"].mean()
-    out: dict[tuple[str, str], np.ndarray] = {}
-    for (table, variable, step), value in means.items():
-        out.setdefault((table, variable), np.full(n_hours, np.nan, dtype=np.float32))[int(step)] = value
+    rows = obs.loc[(obs["source_table"] == CONCEPT_SOURCE) & obs["numeric_value"].notna()
+                   & obs["step_idx"].between(0, n_hours - 1)]
+    means = rows.groupby(["variable_name", "step_idx"])["numeric_value"].mean()
+    out: dict[str, np.ndarray] = {}
+    for (concept, step), value in means.items():
+        out.setdefault(concept, np.full(n_hours, np.nan, dtype=np.float32))[int(step)] = value
     return out
 
 
@@ -88,11 +87,9 @@ def renal_replacement(act: pd.DataFrame, n_hours: int) -> np.ndarray:
     if act.empty:
         return np.zeros(n_hours, dtype=bool)
     name = act["variable_name"].astype(str)
-    dialysis = (act["source_table"] == "rrt") & name.str.contains("dialysis_active|dialysis_present", case=False) \
-        & (act["numeric_value"] > 0)
     procedure = (act["category"] == "procedure") & name.str.contains(r"CRRT|Hemodialy", case=False) \
         & ~name.str.contains("Catheter", case=False)
-    charted = active_hours(act.loc[dialysis | procedure, "step_idx"].to_numpy(dtype=np.int64), n_hours)
+    charted = active_hours(act.loc[procedure, "step_idx"].to_numpy(dtype=np.int64), n_hours)
     hours = np.arange(n_hours)
     last = np.maximum.accumulate(np.where(charted, hours, -(10 ** 9)))
     return (hours - last) <= 48
@@ -102,8 +99,8 @@ def states(obs: pd.DataFrame, act: pd.DataFrame, n_hours: int) -> dict[str, np.n
     """Per task: 1 where the organ is failing, 0 where that is ruled out, NaN where it cannot be told."""
     means = hourly_means(obs, n_hours)
 
-    def get(table: str, variable: str) -> np.ndarray:
-        return means.get((table, variable), np.full(n_hours, np.nan, dtype=np.float32))
+    def get(concept: str) -> np.ndarray:
+        return means.get(concept, np.full(n_hours, np.nan, dtype=np.float32))
 
     def state(event: np.ndarray, non_event: np.ndarray) -> np.ndarray:
         out = np.full(n_hours, np.nan, dtype=np.float32)
@@ -114,31 +111,18 @@ def states(obs: pd.DataFrame, act: pd.DataFrame, n_hours: int) -> dict[str, np.n
     out = {}
     with np.errstate(invalid="ignore", divide="ignore"), warnings.catch_warnings():
         warnings.simplefilter("ignore", RuntimeWarning)
-        pressure = get("vitalsign", "mbp")
-        if np.isnan(pressure).all():
-            pressure = get("vitalsign", "mbp_ni")
-        lactate = fill_lactate(get("bg", "lactate"))
+        pressure = get("mean_arterial_pressure")
+        lactate = fill_lactate(get("lactate"))
         out["circ_failure_8h"] = state((pressure < 65) & (lactate > 2.0), (pressure >= 65) & (lactate <= 2.0))
 
-        ratio = get("bg", "pao2fio2ratio")
-        if (~np.isnan(ratio)).sum() < MIN_CHARTED_RATIOS:
-            fio2 = get("bg", "fio2")
-            if np.isnan(fio2).all():
-                fio2 = get("bg", "fio2_chartevents")
-            if not np.isnan(fio2).all() and np.nanmax(fio2) > MAX_FIO2_FRACTION:
-                fio2 = fio2 / 100.0
-            fio2 = fill(fio2, 1)
-            computed = fill(get("bg", "po2"), 1) / np.where(fio2 > 0, fio2, np.nan)
-            ratio = np.where(np.isnan(ratio), computed, ratio)
-        ratio = fill(ratio, 1)
-        ventilated = np.zeros(n_hours, dtype=bool) if act.empty else active_hours(
-            act.loc[act["category"].isin(["ventilation", "ventilation_settings"]), "step_idx"].to_numpy(np.int64),
-            n_hours)
-        out["resp_failure_24h"] = state(ventilated & (ratio < 100.0), ventilated & (ratio >= 100.0))
+        # Respiratory failure is a PaO2/FiO2 ratio below 100 while ventilated.
+        # WeavEHR has no such ratio, and none is derived here from specimens
+        # and settings charted at different times, so the state stays unknown.
+        out["resp_failure_24h"] = np.full(n_hours, np.nan, dtype=np.float32)
 
-        creatinine_raw = get("chemistry", "creatinine")
+        creatinine_raw = get("creatinine")
         creatinine = interpolate(creatinine_raw, 48, fill(creatinine_raw, 48))
-        renal_sofa = fill(get("sofa", "renal_24hours"), 24)
+        renal_sofa = fill(get("sofa_renal"), 24)
         on_rrt = renal_replacement(act, n_hours)
         high = creatinine >= 4.0
         if not np.isnan(creatinine_raw).all():
@@ -146,12 +130,13 @@ def states(obs: pd.DataFrame, act: pd.DataFrame, n_hours: int) -> dict[str, np.n
         event = on_rrt | high | (renal_sofa >= 3)
         out["kidney_failure_48h"] = state(event, ~event & ~np.isnan(creatinine) & ~np.isnan(renal_sofa))
 
-        meld = (9.57 * np.log(np.clip(fill(get("chemistry", "creatinine"), 1), 1.0, None))
-                + 3.78 * np.log(np.clip(fill(get("enzyme", "bilirubin_total"), 1), 1.0, None))
-                + 11.2 * np.log(np.clip(fill(get("coagulation", "inr"), 1), 1.0, None)) + 6.43)
+        inr = get("prothrombin_time_international_normalized_ratio")
+        meld = (9.57 * np.log(np.clip(fill(get("creatinine"), 1), 1.0, None))
+                + 3.78 * np.log(np.clip(fill(get("total_bilirubin"), 1), 1.0, None))
+                + 11.2 * np.log(np.clip(fill(inr, 1), 1.0, None)) + 6.43)
         out["liver_failure_48h"] = state(meld > 30.0, meld <= 30.0)
 
-        glucose = np.nanmedian(np.stack([get("bg", "glucose"), get("chemistry", "glucose")]), axis=0)
+        glucose = get("glucose")
         out["hyperglycemia_8h"] = state(glucose > 180.0, glucose <= 180.0)
     return out
 
